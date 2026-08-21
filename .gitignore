@@ -5,3 +5,8 @@ __pycache__/
 data/research.db
 data/uploads/
 .streamlit/
+
+# Local tools and test outputs
+*.exe
+osv*_out.json
+test_reqs.txt
