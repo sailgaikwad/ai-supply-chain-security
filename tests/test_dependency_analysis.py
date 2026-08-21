@@ -75,3 +75,43 @@ def test_run_osv_scanner_v2(mock_run):
     assert findings[0]["package_name"] == "requests"
     assert findings[0]["severity"] == "HIGH"
 
+def test_deduplicate_vulnerabilities():
+    from app.scanner.dependency_analysis import deduplicate_vulnerabilities
+    
+    raw = [
+        {
+            "package_name": "pkgA", "package_version": "1.0",
+            "vulnerability_id": "GHSA-1", "aliases": ["CVE-1"], "severity": "MEDIUM"
+        },
+        {
+            "package_name": "pkgA", "package_version": "1.0",
+            "vulnerability_id": "CVE-1", "aliases": ["PYSEC-1"], "severity": "HIGH"
+        },
+        {
+            "package_name": "pkgA", "package_version": "1.0",
+            "vulnerability_id": "PYSEC-1", "aliases": [], "severity": "LOW"
+        },
+        {
+            "package_name": "pkgB", "package_version": "2.0",
+            "vulnerability_id": "CVE-2", "aliases": [], "severity": "CRITICAL"
+        }
+    ]
+    
+    deduped = deduplicate_vulnerabilities(raw)
+    
+    # pkgA should be merged into ONE finding with highest severity (HIGH from CVE-1)
+    # pkgB should be untouched
+    assert len(deduped) == 2
+    
+    pkgA_finding = next(f for f in deduped if f["package_name"] == "pkgA")
+    assert pkgA_finding["severity"] == "HIGH" # Canonical was chosen by highest severity
+    # The aliases list should contain all other IDs (GHSA-1, PYSEC-1, and maybe CVE-1 if canonical is GHSA-1)
+    # Wait, the canonical will be CVE-1 because it has HIGH severity.
+    assert pkgA_finding["vulnerability_id"] == "CVE-1"
+    assert set(pkgA_finding["aliases"]) == {"GHSA-1", "PYSEC-1"}
+    
+    pkgB_finding = next(f for f in deduped if f["package_name"] == "pkgB")
+    assert pkgB_finding["severity"] == "CRITICAL"
+    assert pkgB_finding["vulnerability_id"] == "CVE-2"
+    assert pkgB_finding["aliases"] == []
+

@@ -20,7 +20,7 @@ def calculate_risk(findings: List[Dict[str, Any]], dep_findings: List[Dict[str, 
     Calculate the overall risk score based on static findings and dependency findings.
     
     Args:
-        findings: A list of static finding dictionaries, each containing a 'score_contribution'.
+        findings: A list of static finding dictionaries.
         dep_findings: A list of dependency finding dictionaries.
         
     Returns:
@@ -29,25 +29,38 @@ def calculate_risk(findings: List[Dict[str, Any]], dep_findings: List[Dict[str, 
     if dep_findings is None:
         dep_findings = []
         
-    total_score = sum(finding.get('score_contribution', 0) for finding in findings)
+    total_score = 0
+    
+    # Static finding aggregation (deduplicate identical issues in the same artifact)
+    seen_static = set()
+    for finding in findings:
+        sig = (finding.get('category'), finding.get('evidence'))
+        if sig not in seen_static:
+            seen_static.add(sig)
+            total_score += finding.get('score_contribution', 0)
     
     # Add dependency risk
     has_critical_dep = False
     has_high_dep = False
+    dep_scores = []
     for df in dep_findings:
         sev = df.get('severity', '').upper()
         if sev == 'CRITICAL':
-            total_score += 40
+            dep_scores.append(40)
             has_critical_dep = True
         elif sev == 'HIGH':
-            total_score += 30
+            dep_scores.append(30)
             has_high_dep = True
         elif sev == 'MEDIUM':
-            total_score += 20
+            dep_scores.append(20)
         elif sev == 'LOW':
-            total_score += 10
+            dep_scores.append(10)
         else:
-            total_score += 10 # Default for unknown
+            dep_scores.append(10) # Default for unknown
+    
+    # Cap dependency contribution to top 3 vulnerabilities to prevent exploding scores
+    dep_scores.sort(reverse=True)
+    total_score += sum(dep_scores[:3])
     
     # Cap score between 0 and 100
     score = min(total_score, 100)

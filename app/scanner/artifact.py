@@ -12,3 +12,4 @@ class Artifact:
     timestamp: datetime.datetime
     sha256: str
     artifact_type: str
+    inventory: dict = None

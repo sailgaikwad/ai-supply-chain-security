@@ -1,14 +1,17 @@
 import ast
 import re
+import os
 from typing import List, Dict, Any
 from app.scanner.artifact import Artifact
 
 class StaticAnalyzer(ast.NodeVisitor):
-    def __init__(self):
+    def __init__(self, file_path: str = ""):
+        self.file_path = file_path
         self.findings = []
         
     def add_finding(self, category: str, severity: str, description: str, evidence: str, score: int):
         self.findings.append({
+            "file_path": self.file_path,
             "category": category,
             "severity": severity,
             "description": description,
@@ -69,32 +72,53 @@ class StaticAnalyzer(ast.NodeVisitor):
                 
         self.generic_visit(node)
 
+def analyze_directory(directory: str) -> List[Dict[str, Any]]:
+    """
+    Perform static analysis on all Python files within a directory recursively.
+    """
+    all_findings = []
+    
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if not file.endswith('.py'):
+                continue
+                
+            abs_path = os.path.join(root, file)
+            # Make the path relative to the extracted directory for the finding report
+            rel_path = os.path.relpath(abs_path, directory)
+            
+            try:
+                with open(abs_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    
+                tree = ast.parse(content)
+                analyzer = StaticAnalyzer(file_path=rel_path)
+                analyzer.visit(tree)
+                all_findings.extend(analyzer.findings)
+            except SyntaxError:
+                pass
+            except UnicodeDecodeError:
+                pass
+            except Exception:
+                pass
+                
+    return all_findings
+
 def analyze_artifact(artifact: Artifact) -> List[Dict[str, Any]]:
     """
-    Perform static analysis on an artifact.
-    Gracefully handles binary/non-source artifacts by returning no findings if parsing fails.
+    Deprecated: Provided for backward compatibility if needed.
     """
+    # Create a temporary directory structure mimicking the new flow if necessary, 
+    # but practically we will now rely on analyze_directory from main.py.
+    # To keep this functioning for single files as before:
     findings = []
-    
     try:
         with open(artifact.file_path, "r", encoding="utf-8") as f:
             content = f.read()
-    except UnicodeDecodeError:
-        # Not a text file, cannot parse as Python AST.
-        return findings
-    except Exception:
-        # Other read errors.
-        return findings
-
-    try:
         tree = ast.parse(content)
-        analyzer = StaticAnalyzer()
+        analyzer = StaticAnalyzer(file_path=artifact.filename)
         analyzer.visit(tree)
         findings.extend(analyzer.findings)
-    except SyntaxError:
-        # Not a valid Python file.
-        pass
     except Exception:
         pass
-        
     return findings

@@ -12,13 +12,14 @@ The current application (Version 1.1) is built with a modular, lightweight archi
 - **Backend**: Python-based static analysis engine, OSV-Scanner dependency analysis integration, and rule-based risk classification.
 - **Storage**: Local SQLite database for persistence of artifacts, scans, and findings.
 
-## Version 1.1 Functionality
-- File upload and metadata extraction (size, timestamp, type).
-- Streaming SHA-256 hash calculation for large files.
-- Modular static analysis using Python AST to detect suspicious indicators (e.g., `os.system`, `eval`, `subprocess`, hardcoded secrets).
-- **Dependency Analysis**: Scans uploaded archives and lockfiles for known vulnerabilities using `osv-scanner` without executing the artifact's code.
-- Transparent, rule-based risk scoring system (0-100) with heuristic classifications (SAFE, LOW, MEDIUM, HIGH, CRITICAL).
-- Local persistence of scan histories, static findings, and dependency findings.
+## Version 1.1 Functionality (Phase 3)
+- **Artifact Ingestion**: Upload individual files or archives (`.zip`, `.tar`, `.tar.gz`, `.tgz`, `.whl`).
+- **Secure Extraction**: Archives are safely extracted to temporary directories enforcing strict limits against Zip-Slip, path traversals, and decompression bombs (max size, file count, and compression ratio limits).
+- **Automated Inventory**: Generates an inventory of extracted contents (total files, size, Python files, manifests, models).
+- **Multi-File Static Analysis**: Recursively analyzes all Python files (`*.py`) across the entire artifact to detect suspicious indicators (e.g., `os.system`, `eval`, hardcoded secrets).
+- **Multi-Manifest Dependency Analysis**: Automatically discovers supported manifests (`requirements.txt`, `Pipfile.lock`, `pyproject.toml`, etc.) and runs `osv-scanner` across all of them, deduplicating findings.
+- **Risk Aggregation**: Transparent, rule-based risk scoring system (0-100) combining vulnerabilities and suspicious code across the entire artifact.
+- **Local Persistence**: Stores artifact inventories, scan histories, static findings, and dependency findings in SQLite.
 
 ## Setup Instructions
 1. Ensure Python 3.9+ is installed on your system.
@@ -45,7 +46,8 @@ Start the Streamlit dashboard by running:
 python -m streamlit run app/dashboard/main.py
 ```
 
-## Limitations
+## Security Considerations & Limitations
+- **Hostile Archives**: Archives are treated as hostile. Pre-extraction safety checks enforce size limits and terminate execution upon discovering path traversal attempts.
 - **No Dynamic Execution**: This version relies solely on static and dependency analysis. It does not execute code to observe runtime behavior.
 - **Heuristic Indicators**: Findings are based on heuristics. The presence of indicators like `os.system` does not inherently mean an artifact is malicious.
 - **Dependency Limitations**: A vulnerable dependency does not guarantee malicious intent, merely that the software includes a known vulnerable component.

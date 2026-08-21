@@ -14,6 +14,73 @@ SUPPORTED_MANIFESTS = [
     "pylock.toml"
 ]
 
+class UnionFind:
+    def __init__(self):
+        self.parent = {}
+    def find(self, item):
+        if self.parent.setdefault(item, item) != item:
+            self.parent[item] = self.find(self.parent[item])
+        return self.parent[item]
+    def union(self, a, b):
+        root_a = self.find(a)
+        root_b = self.find(b)
+        if root_a != root_b:
+            self.parent[root_a] = root_b
+
+def deduplicate_vulnerabilities(raw_findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    # Step 1: Group by package and version
+    groups = {}
+    for finding in raw_findings:
+        key = (finding['package_name'], finding['package_version'])
+        groups.setdefault(key, []).append(finding)
+        
+    deduped = []
+    
+    for key, findings in groups.items():
+        uf = UnionFind()
+        
+        # Link all IDs for each finding
+        for finding in findings:
+            all_ids = set(finding.get('aliases', []))
+            all_ids.add(finding['vulnerability_id'])
+            all_ids_list = list(all_ids)
+            if not all_ids_list:
+                continue
+            first_id = all_ids_list[0]
+            for other_id in all_ids_list[1:]:
+                uf.union(first_id, other_id)
+                
+        # Group findings by root
+        root_to_findings = {}
+        for finding in findings:
+            v_id = finding['vulnerability_id']
+            root = uf.find(v_id)
+            root_to_findings.setdefault(root, []).append(finding)
+            
+        # For each group, pick one canonical finding and merge aliases
+        for root, group in root_to_findings.items():
+            # Sort by severity (CRITICAL > HIGH > MEDIUM > LOW > UNKNOWN)
+            sev_rank = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "UNKNOWN": 0}
+            group.sort(key=lambda x: sev_rank.get(x['severity'], 0), reverse=True)
+            
+            canonical = group[0]
+            
+            # Gather all aliases from the group
+            all_aliases = set()
+            for f in group:
+                all_aliases.add(f['vulnerability_id'])
+                for a in f.get('aliases', []):
+                    all_aliases.add(a)
+                    
+            # Remove canonical ID from aliases list
+            if canonical['vulnerability_id'] in all_aliases:
+                all_aliases.remove(canonical['vulnerability_id'])
+                
+            canonical['aliases'] = sorted(list(all_aliases))
+            deduped.append(canonical)
+            
+    return deduped
+
 def find_manifests(directory: str) -> List[str]:
     """Find supported dependency manifests in a directory."""
     manifests = []
@@ -143,6 +210,7 @@ def run_osv_scanner(manifest_path: str) -> List[Dict[str, Any]]:
                         "package_name": pkg_name,
                         "package_version": pkg_version,
                         "vulnerability_id": vuln_id,
+                        "aliases": aliases,
                         "severity": severity,
                         "summary": summary,
                         "fixed_version": "",
@@ -161,7 +229,7 @@ def run_osv_scanner(manifest_path: str) -> List[Dict[str, Any]]:
 
 def scan_dependencies(extract_dir: str) -> Tuple[bool, int, List[Dict[str, Any]]]:
     """
-    Scans a directory for dependencies.
+    Scans a directory for dependencies across all manifests.
     Returns (analysis_available, total_dependencies, findings)
     """
     manifests = find_manifests(extract_dir)
@@ -170,11 +238,14 @@ def scan_dependencies(extract_dir: str) -> Tuple[bool, int, List[Dict[str, Any]]
         return False, 0, []
         
     total_deps = 0
-    all_findings = []
+    raw_findings = []
     
     for manifest in manifests:
         total_deps += extract_dependencies(manifest)
         findings = run_osv_scanner(manifest)
-        all_findings.extend(findings)
+        raw_findings.extend(findings)
         
-    return True, total_deps, all_findings
+    # Deduplicate findings across multiple manifests and aliases
+    deduped_findings = deduplicate_vulnerabilities(raw_findings)
+        
+    return True, total_deps, deduped_findings

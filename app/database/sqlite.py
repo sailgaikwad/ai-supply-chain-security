@@ -70,6 +70,22 @@ def init_db():
     )
     ''')
     
+    # Safely migrate existing databases
+    try:
+        cursor.execute("ALTER TABLE artifacts ADD COLUMN inventory_json TEXT DEFAULT '{}'")
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute("ALTER TABLE findings ADD COLUMN file_path TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute("ALTER TABLE dependency_findings ADD COLUMN aliases TEXT DEFAULT '[]'")
+    except sqlite3.OperationalError:
+        pass
+        
     conn.commit()
     conn.close()
 
@@ -77,11 +93,15 @@ def insert_artifact(artifact: Artifact) -> int:
     """Insert an artifact into the database and return its ID."""
     conn = get_connection()
     cursor = conn.cursor()
+    
+    import json
+    inventory_str = json.dumps(artifact.inventory) if artifact.inventory else "{}"
+    
     cursor.execute('''
-        INSERT INTO artifacts (filename, file_path, size, timestamp, sha256, artifact_type)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO artifacts (filename, file_path, size, timestamp, sha256, artifact_type, inventory_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (artifact.filename, artifact.file_path, artifact.size, 
-          artifact.timestamp.isoformat(), artifact.sha256, artifact.artifact_type))
+          artifact.timestamp.isoformat(), artifact.sha256, artifact.artifact_type, inventory_str))
     artifact_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -100,11 +120,12 @@ def insert_scan_result(artifact_id: int, score: int, classification: str, findin
     scan_id = cursor.lastrowid
     
     for finding in findings:
+        file_path = finding.get('file_path', '')
         cursor.execute('''
-            INSERT INTO findings (scan_id, category, severity, description, evidence, score_contribution)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO findings (scan_id, category, severity, description, evidence, score_contribution, file_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (scan_id, finding['category'], finding['severity'], 
-              finding['description'], finding['evidence'], finding['score_contribution']))
+              finding['description'], finding['evidence'], finding['score_contribution'], file_path))
               
     conn.commit()
     conn.close()
@@ -115,12 +136,14 @@ def insert_dependency_findings(scan_id: int, dep_findings: List[Dict[str, Any]])
     conn = get_connection()
     cursor = conn.cursor()
     for df in dep_findings:
+        import json
+        aliases_str = json.dumps(df.get('aliases', []))
         cursor.execute('''
             INSERT INTO dependency_findings 
-            (scan_id, package_name, package_version, vulnerability_id, severity, summary, fixed_version, source, evidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (scan_id, package_name, package_version, vulnerability_id, severity, summary, fixed_version, source, evidence, aliases)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (scan_id, df['package_name'], df['package_version'], df['vulnerability_id'],
-              df['severity'], df['summary'], df['fixed_version'], df['source'], df['evidence']))
+              df['severity'], df['summary'], df['fixed_version'], df['source'], df['evidence'], aliases_str))
               
     conn.commit()
     conn.close()
@@ -171,13 +194,14 @@ def get_dependency_findings(scan_id: int) -> List[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT package_name, package_version, vulnerability_id, severity, summary, fixed_version, source, evidence
+        SELECT package_name, package_version, vulnerability_id, severity, summary, fixed_version, source, evidence, aliases
         FROM dependency_findings
         WHERE scan_id = ?
     ''', (scan_id,))
     rows = cursor.fetchall()
     conn.close()
     
+    import json
     return [{
         "package_name": r[0], 
         "package_version": r[1], 
@@ -186,5 +210,6 @@ def get_dependency_findings(scan_id: int) -> List[Dict[str, Any]]:
         "summary": r[4], 
         "fixed_version": r[5], 
         "source": r[6], 
-        "evidence": r[7]
+        "evidence": r[7],
+        "aliases": json.loads(r[8]) if r[8] else []
     } for r in rows]
