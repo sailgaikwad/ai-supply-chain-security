@@ -1,4 +1,1 @@
-streamlit
-pandas
-plotly
-pytest
+requests==2.19.0

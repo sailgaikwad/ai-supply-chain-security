@@ -31,9 +31,13 @@ def test_calculate_risk():
         {"score_contribution": 30, "category": "test"},
         {"score_contribution": 40, "category": "test"}
     ]
-    score, classification, explanation = calculate_risk(findings)
-    assert score == 70
-    assert classification == "HIGH"
+    dep_findings = [
+        {"severity": "HIGH"}
+    ]
+    score, classification, explanation = calculate_risk(findings, dep_findings)
+    # 30 + 40 + 30 (high) = 100
+    assert score == 100
+    assert classification == "CRITICAL"
 
 def test_static_analysis():
     with tempfile.NamedTemporaryFile(mode='w', suffix=".py", delete=False) as f:

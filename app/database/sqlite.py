@@ -54,6 +54,22 @@ def init_db():
     )
     ''')
     
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS dependency_findings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        scan_id INTEGER NOT NULL,
+        package_name TEXT NOT NULL,
+        package_version TEXT NOT NULL,
+        vulnerability_id TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        fixed_version TEXT,
+        source TEXT NOT NULL,
+        evidence TEXT NOT NULL,
+        FOREIGN KEY(scan_id) REFERENCES scans(id)
+    )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -89,6 +105,22 @@ def insert_scan_result(artifact_id: int, score: int, classification: str, findin
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (scan_id, finding['category'], finding['severity'], 
               finding['description'], finding['evidence'], finding['score_contribution']))
+              
+    conn.commit()
+    conn.close()
+    return scan_id
+
+def insert_dependency_findings(scan_id: int, dep_findings: List[Dict[str, Any]]):
+    """Insert dependency findings associated with a scan."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    for df in dep_findings:
+        cursor.execute('''
+            INSERT INTO dependency_findings 
+            (scan_id, package_name, package_version, vulnerability_id, severity, summary, fixed_version, source, evidence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (scan_id, df['package_name'], df['package_version'], df['vulnerability_id'],
+              df['severity'], df['summary'], df['fixed_version'], df['source'], df['evidence']))
               
     conn.commit()
     conn.close()
@@ -133,3 +165,26 @@ def get_scan_history() -> List[Dict[str, Any]]:
     conn.close()
     
     return [{"filename": r[0], "timestamp": r[1], "score": r[2], "classification": r[3]} for r in rows]
+
+def get_dependency_findings(scan_id: int) -> List[Dict[str, Any]]:
+    """Retrieve dependency findings for a given scan ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT package_name, package_version, vulnerability_id, severity, summary, fixed_version, source, evidence
+        FROM dependency_findings
+        WHERE scan_id = ?
+    ''', (scan_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return [{
+        "package_name": r[0], 
+        "package_version": r[1], 
+        "vulnerability_id": r[2], 
+        "severity": r[3], 
+        "summary": r[4], 
+        "fixed_version": r[5], 
+        "source": r[6], 
+        "evidence": r[7]
+    } for r in rows]
