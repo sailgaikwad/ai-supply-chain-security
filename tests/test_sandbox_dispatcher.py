@@ -68,20 +68,22 @@ def test_dispatch_success(mock_open, mock_run, mock_check):
     # Mock the retrieved JSON payload
     mock_file = MagicMock()
     mock_file.__enter__.return_value.read.return_value = json.dumps({
-        "dynamic_score": 35,
-        "severity": "MEDIUM",
+        "risk": {
+            "score": 25,
+            "severity": "MEDIUM"
+        },
         "findings": ["network_communication"]
     })
     mock_open.return_value = mock_file
-    
+
     with tempfile.NamedTemporaryFile(delete=False) as f:
         f.write(b"test data")
         temp_path = f.name
-        
+
     try:
         result = dispatch_artifact(temp_path)
         assert result["success"] is True
-        assert result["dynamic_score"] == 35
+        assert result["dynamic_score"] == 25
         assert result["dynamic_severity"] == "MEDIUM"
         assert result["analysis"]["findings"] == ["network_communication"]
         assert result["job_id"] == "20260826_091951_behavior-test"

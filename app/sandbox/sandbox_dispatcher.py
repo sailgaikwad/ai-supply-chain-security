@@ -136,8 +136,9 @@ def dispatch_artifact(artifact_path: str) -> dict:
         base_result["analysis"] = analysis_data
         
         # Safely extract score and severity from JSON
-        base_result["dynamic_score"] = analysis_data.get("dynamic_score", 0)
-        base_result["dynamic_severity"] = analysis_data.get("severity", "UNKNOWN")
+        risk_data = analysis_data.get("risk", {})
+        base_result["dynamic_score"] = risk_data.get("score", 0)
+        base_result["dynamic_severity"] = risk_data.get("severity", "UNKNOWN")
         
         return base_result
         
