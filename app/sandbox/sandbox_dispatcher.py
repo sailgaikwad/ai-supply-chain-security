@@ -98,6 +98,18 @@ def dispatch_artifact(artifact_path: str) -> dict:
             # We'll rely on the JSON existence as the ultimate success check, but log the error.
             logger.warning(f"Orchestrator returned non-zero exit code: {exec_res.stderr.strip()}")
             
+        # Extract JOB_ID from orchestrator output
+        if exec_res.stdout.strip():
+            # Get the last non-empty line
+            lines = [line.strip() for line in exec_res.stdout.strip().split('\n') if line.strip()]
+            if lines:
+                # The orchestrator returns the JOB_ID
+                job_id = lines[-1]
+                base_result["job_id"] = job_id
+                
+        # Construct the remote JSON path using the actual JOB_ID
+        remote_json_path = f"/home/researcher/ai-lab/jobs/{job_id}/results/analysis_v3.json"
+            
         # 8 & 9. Retrieve JSON result back to Kali
         # Prepare local storage path
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
