@@ -10,3 +10,4 @@ data/uploads/
 *.exe
 osv*_out.json
 test_reqs.txt
+data/sandbox_results/

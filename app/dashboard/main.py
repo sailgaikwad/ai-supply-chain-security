@@ -20,6 +20,7 @@ from app.scanner.risk_engine import calculate_risk
 from app.scanner.extraction import safe_extract
 from app.scanner.dependency_analysis import scan_dependencies
 from app.scanner.inventory import inventory_directory
+from app.sandbox.sandbox_dispatcher import dispatch_artifact
 
 # Check for OSV-Scanner
 osv_available = False
@@ -160,6 +161,35 @@ if uploaded_file is not None:
                     st.write(f"**Explanation:** {explanation}")
                     
                     st.info("⚠️ This is a heuristic analysis and does NOT definitively prove that an artifact is malicious.")
+                    
+                    st.subheader("DYNAMIC SANDBOX ANALYSIS")
+                    if score < 40:
+                        st.write("Dynamic sandbox analysis was not triggered because the artifact did not meet the current sandbox threshold.")
+                    else:
+                        st.write("Artifact submitted to isolated sandbox.")
+                        with st.spinner("Executing dynamically in sandbox..."):
+                            dynamic_res = dispatch_artifact(file_path)
+                            
+                        if dynamic_res["success"]:
+                            st.write("**Sandbox Status:** SUCCESS")
+                            st.write(f"**Job ID:** {dynamic_res['job_id']}")
+                            st.write(f"**Dynamic Risk Score:** {dynamic_res['dynamic_score']}")
+                            st.write(f"**Dynamic Severity:** {dynamic_res['dynamic_severity']}")
+                            st.write("**Dynamic Findings:**")
+                            # Try to extract a findings list from the analysis dict
+                            findings_list = dynamic_res.get("analysis", {}).get("findings", [])
+                            if isinstance(findings_list, list) and findings_list:
+                                for f in findings_list:
+                                    st.write(f"- {f}")
+                            elif findings_list:
+                                st.write(str(findings_list))
+                            else:
+                                st.write("No dynamic findings reported.")
+                        else:
+                            st.warning("Dynamic sandbox analysis could not be completed.")
+                            st.error(f"Error: {dynamic_res['error']}")
+                            
+                        st.info("The artifact was executed only inside the isolated Ubuntu sandbox.")
                     
                     st.subheader("DEPENDENCY ANALYSIS")
                     st.write(f"**Dependency analysis available:** {'Yes' if analysis_available else 'No'}")
