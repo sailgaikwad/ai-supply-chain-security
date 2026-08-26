@@ -176,15 +176,26 @@ if uploaded_file is not None:
                             st.write(f"**Dynamic Risk Score:** {dynamic_res['dynamic_score']}")
                             st.write(f"**Dynamic Severity:** {dynamic_res['dynamic_severity']}")
                             st.write("**Dynamic Findings:**")
-                            # Try to extract a findings list from the analysis dict
-                            findings_list = dynamic_res.get("analysis", {}).get("findings", [])
-                            if isinstance(findings_list, list) and findings_list:
-                                for f in findings_list:
-                                    st.write(f"- {f}")
-                            elif findings_list:
-                                st.write(str(findings_list))
+                            # Extract security_findings from analysis dict
+                            sec_findings = dynamic_res.get("analysis", {}).get("security_findings", [])
+                            if isinstance(sec_findings, list) and sec_findings:
+                                for f in sec_findings:
+                                    # Expect dict with keys: indicator, severity, score, evidence
+                                    indicator = f.get("indicator", "<unknown>")
+                                    severity = f.get("severity", "<unknown>")
+                                    score = f.get("score", "<unknown>")
+                                    evidence = f.get("evidence", "")
+                                    st.write(f"- Indicator: {indicator}, Severity: {severity}, Score: {score}")
+                                    if evidence:
+                                        st.write(f"  Evidence: {evidence}")
                             else:
-                                st.write("No dynamic findings reported.")
+                                # Fallback to generic findings if present
+                                findings_list = dynamic_res.get("analysis", {}).get("findings", [])
+                                if isinstance(findings_list, list) and findings_list:
+                                    for f in findings_list:
+                                        st.write(f"- {f}")
+                                else:
+                                    st.write("No dynamic findings reported.")
                         else:
                             st.warning("Dynamic sandbox analysis could not be completed.")
                             st.error(f"Error: {dynamic_res['error']}")
