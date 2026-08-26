@@ -100,12 +100,13 @@ def dispatch_artifact(artifact_path: str) -> dict:
             
         # Extract JOB_ID from orchestrator output
         if exec_res.stdout.strip():
-            # Get the last non-empty line
-            lines = [line.strip() for line in exec_res.stdout.strip().split('\n') if line.strip()]
-            if lines:
-                # The orchestrator returns the JOB_ID
-                job_id = lines[-1]
-                base_result["job_id"] = job_id
+            for line in exec_res.stdout.split('\n'):
+                line = line.strip()
+                if line.startswith("Job") and ":" in line:
+                    # Parse 'Job       : 20260826_091951_behavior-test'
+                    job_id = line.split(":", 1)[1].strip()
+                    base_result["job_id"] = job_id
+                    break
                 
         # Construct the remote JSON path using the actual JOB_ID
         remote_json_path = f"/home/researcher/ai-lab/jobs/{job_id}/results/analysis_v3.json"

@@ -62,7 +62,7 @@ def test_dispatch_success(mock_open, mock_run, mock_check):
     mock_res = MagicMock()
     mock_res.returncode = 0
     # Simulate the orchestrator printing the JOB_ID
-    mock_res.stdout = "fake-orchestrator-job-id-1234\n"
+    mock_res.stdout = "Job       : 20260826_091951_behavior-test\nResults   : /home/researcher/ai-lab/jobs/20260826_091951_behavior-test/results\n"
     mock_run.return_value = mock_res
     
     # Mock the retrieved JSON payload
@@ -84,16 +84,16 @@ def test_dispatch_success(mock_open, mock_run, mock_check):
         assert result["dynamic_score"] == 35
         assert result["dynamic_severity"] == "MEDIUM"
         assert result["analysis"]["findings"] == ["network_communication"]
-        assert result["job_id"] == "fake-orchestrator-job-id-1234"
+        assert result["job_id"] == "20260826_091951_behavior-test"
         
         # Verify the SCP pull command was constructed correctly
         # The SCP pull should be the 3rd subprocess.run call (mkdir, scp push, ssh exec, scp pull)
         # Wait, there are 4 calls total. The last call is the SCP pull.
         scp_pull_call = mock_run.call_args_list[-1]
         scp_cmd_args = scp_pull_call[0][0]
-        remote_path_arg = scp_cmd_args[-2] # e.g. "researcher@10.10.10.20:/home/researcher/ai-lab/jobs/fake-orchestrator-job-id-1234/results/analysis_v3.json"
+        remote_path_arg = scp_cmd_args[-2] # e.g. "researcher@10.10.10.20:/home/researcher/ai-lab/jobs/20260826_091951_behavior-test/results/analysis_v3.json"
         
-        assert "fake-orchestrator-job-id-1234" in remote_path_arg
+        assert "20260826_091951_behavior-test" in remote_path_arg
         assert "/results/analysis_v3.json" in remote_path_arg
         
     finally:
