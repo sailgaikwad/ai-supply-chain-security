@@ -16,7 +16,7 @@ from app.database.sqlite import init_db, get_metrics, get_scan_history, insert_a
 from app.scanner.artifact import Artifact
 from app.scanner.hashing import calculate_sha256
 from app.scanner.static_analysis import analyze_directory
-from app.scanner.risk_engine import calculate_risk
+from app.scanner.risk_engine import calculate_risk, calculate_unified_risk
 from app.scanner.extraction import safe_extract
 from app.scanner.dependency_analysis import scan_dependencies
 from app.scanner.inventory import inventory_directory
@@ -162,50 +162,51 @@ if uploaded_file is not None:
                     
                     st.info("⚠️ This is a heuristic analysis and does NOT definitively prove that an artifact is malicious.")
                     
-                    st.subheader("DYNAMIC SANDBOX ANALYSIS")
-                    if score < 40:
-                        st.write("Dynamic sandbox analysis was not triggered because the artifact did not meet the current sandbox threshold.")
-                    else:
-                        st.write("Artifact submitted to isolated sandbox.")
-                        with st.spinner("Executing dynamically in sandbox..."):
-                            dynamic_res = dispatch_artifact(file_path)
-                            
-                        if dynamic_res["success"]:
-                            st.write("**Sandbox Status:** SUCCESS")
-                            st.write(f"**Job ID:** {dynamic_res['job_id']}")
-                            st.write(f"**Dynamic Risk Score:** {dynamic_res['dynamic_score']}")
-                            st.write(f"**Dynamic Severity:** {dynamic_res['dynamic_severity']}")
-                            st.write("**Dynamic Findings:**")
-                            # Extract security_findings from analysis dict
-                            sec_findings = dynamic_res.get("analysis", {}).get("security_findings", [])
-                            if isinstance(sec_findings, list) and sec_findings:
-                                for f in sec_findings:
-                                    # Expect dict with keys: indicator, severity, score, evidence
-                                    indicator = f.get("indicator", "<unknown>")
-                                    severity = f.get("severity", "<unknown>")
-                                    score = f.get("score", "<unknown>")
-                                    evidence = f.get("evidence", "")
-                                    st.write(f"- Indicator: {indicator}, Severity: {severity}, Score: {score}")
-                                    if evidence:
-                                        st.write(f"  Evidence: {evidence}")
-                            else:
-                                # Fallback to generic findings if present
-                                findings_list = dynamic_res.get("analysis", {}).get("findings", [])
-                                if isinstance(findings_list, list) and findings_list:
-                                    for f in findings_list:
-                                        st.write(f"- {f}")
-                                else:
-                                    st.write("No dynamic findings reported.")
-                        else:
-                            st.warning("Dynamic sandbox analysis could not be completed.")
-                            st.error(f"Error: {dynamic_res['error']}")
-                            
-                        st.info("The artifact was executed only inside the isolated Ubuntu sandbox.")
-                    
                     st.subheader("DEPENDENCY ANALYSIS")
                     st.write(f"**Dependency analysis available:** {'Yes' if analysis_available else 'No'}")
                     if analysis_available:
                         st.write(f"**Dependencies discovered:** {total_deps}")
+
+                        st.subheader("DYNAMIC SANDBOX ANALYSIS")
+                        if score < 40:
+                            st.write("Dynamic sandbox analysis was not triggered because the artifact did not meet the current sandbox threshold.")
+                        else:
+                            st.write("Artifact submitted to isolated sandbox.")
+                            with st.spinner("Executing dynamically in sandbox..."):
+                                dynamic_res = dispatch_artifact(file_path)
+                                
+                            if dynamic_res["success"]:
+                                st.write("**Sandbox Status:** SUCCESS")
+                                st.write(f"**Job ID:** {dynamic_res['job_id']}")
+                                st.write(f"**Dynamic Risk Score:** {dynamic_res['dynamic_score']}")
+                                st.write(f"**Dynamic Severity:** {dynamic_res['dynamic_severity']}")
+                                st.write("**Dynamic Findings:**")
+                                # Extract security_findings from analysis dict
+                                sec_findings = dynamic_res.get("analysis", {}).get("security_findings", [])
+                                if isinstance(sec_findings, list) and sec_findings:
+                                    for f in sec_findings:
+                                        # Expect dict with keys: indicator, severity, score, evidence
+                                        indicator = f.get("indicator", "<unknown>")
+                                        severity = f.get("severity", "<unknown>")
+                                        score = f.get("score", "<unknown>")
+                                        evidence = f.get("evidence", "")
+                                        st.write(f"- Indicator: {indicator}, Severity: {severity}, Score: {score}")
+                                        if evidence:
+                                            st.write(f"  Evidence: {evidence}")
+                                else:
+                                    # Fallback to generic findings if present
+                                    findings_list = dynamic_res.get("analysis", {}).get("findings", [])
+                                    if isinstance(findings_list, list) and findings_list:
+                                        for f in findings_list:
+                                            st.write(f"- {f}")
+                                    else:
+                                        st.write("No dynamic findings reported.")
+                            else:
+                                st.warning("Dynamic sandbox analysis could not be completed.")
+                                st.error(f"Error: {dynamic_res['error']}")
+                                
+                            st.info("The artifact was executed only inside the isolated Ubuntu sandbox.")
+                        
                         st.write(f"**Vulnerable dependencies count:** {len(dep_findings)}")
                         
                         if dep_findings:
@@ -223,6 +224,21 @@ if uploaded_file is not None:
                             st.write("No vulnerable dependencies found.")
                     
                     st.subheader("STATIC CODE FINDINGS")
+
+                    # Compute Unified Risk Assessment (Approach B)
+                    unified_result = calculate_unified_risk(findings, dep_findings, dynamic_res if dynamic_available else None)
+                    # Display Unified Risk Assessment section
+                    st.subheader("Unified Risk Assessment")
+                    col_a, col_b = st.columns(2)
+                    col_a.metric("Unified Risk Score", f"{unified_result['risk_score']} / 100")
+                    col_b.metric("Classification", unified_result['classification'])
+                    st.metric("Vulnerability Risk", unified_result['vulnerability_risk'])
+                    st.metric("Behavioral Risk", unified_result['behavioral_risk'])
+                    st.metric("Confidence", unified_result['confidence'])
+                    st.metric("Security Findings Present", str(unified_result['security_findings_present']))
+                    st.subheader("Evidence Breakdown")
+                    st.write(unified_result['explanation'])
+                    st.json(unified_result['component_assessment'])
                     if findings:
                         df_findings = pd.DataFrame(findings)
                         # Reorder columns to show file_path clearly
