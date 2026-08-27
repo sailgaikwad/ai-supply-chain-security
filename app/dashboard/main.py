@@ -226,6 +226,8 @@ if uploaded_file is not None:
                     st.subheader("STATIC CODE FINDINGS")
 
                     # Compute Unified Risk Assessment (Approach B)
+                    # Determine if dynamic sandbox result is available
+                    dynamic_available = dynamic_res.get("success", False) if "dynamic_res" in locals() else False
                     unified_result = calculate_unified_risk(findings, dep_findings, dynamic_res if dynamic_available else None)
                     # Display Unified Risk Assessment section
                     st.subheader("Unified Risk Assessment")
